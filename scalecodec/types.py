@@ -18,16 +18,20 @@ import struct
 import warnings
 from datetime import datetime
 from hashlib import blake2b
-from typing import Union
+from typing import Union, Optional
 
+from scalecodec.constants import TYPE_DECOMP_MAX_RECURSIVE
 from scalecodec.utils.ss58 import ss58_decode_account_index, ss58_decode, ss58_encode, is_valid_ss58_address
 
-from scalecodec.base import ScaleType, ScaleBytes
+from scalecodec.base import ScaleType, ScaleBytes, ScalePrimitive
 from scalecodec.exceptions import InvalidScaleTypeValueException, MetadataCallFunctionNotFound
 from scalecodec.utils.math import trailing_zeros, next_power_of_two
 
 
 class Compact(ScaleType):
+    """
+    A space efficient type to encoding fixed-width integers
+    """
 
     def __init__(self, data=None, **kwargs):
         self.compact_length = 0
@@ -90,6 +94,14 @@ class Compact(ScaleType):
             else:
                 raise ValueError('{} out of range'.format(value))
 
+    @classmethod
+    def generate_type_decomposition(cls, _recursion_level: int = 0, max_recursion: int = TYPE_DECOMP_MAX_RECURSIVE):
+        if cls.sub_type is None:
+            return cls.__name__
+
+        scale_obj = cls.runtime_config.create_scale_object(cls.sub_type)
+        return scale_obj.generate_type_decomposition(_recursion_level=_recursion_level + 1, max_recursion=max_recursion)
+
 
 class CompactU32(Compact):
     """
@@ -127,6 +139,11 @@ class CompactU32(Compact):
 
 
 class Option(ScaleType):
+    """
+    Option is a type that represents an optional value, which can be either Some(value) if a value is present or None
+    if it is absent, allowing for safe handling of null or missing values without causing runtime errors.
+    """
+
     def process(self):
 
         option_byte = self.get_next_bytes(1)
@@ -149,9 +166,22 @@ class Option(ScaleType):
     def process_scale_info_definition(cls, scale_info_definition: 'GenericRegistryType', prefix: str):
         cls.sub_type = f"{prefix}::{scale_info_definition.value['params'][0]['type']}"
 
+    @classmethod
+    def generate_type_decomposition(cls, _recursion_level: int = 0, max_recursion: int = TYPE_DECOMP_MAX_RECURSIVE):
+
+        if cls.sub_type is None:
+            raise ValueError("'sub_type' is not set")
+
+        sub_type_obj = cls.runtime_config.create_scale_object(cls.sub_type)
+        return None, sub_type_obj.generate_type_decomposition(
+            _recursion_level=_recursion_level + 1, max_recursion=max_recursion
+        )
+
 
 class Bytes(ScaleType):
-
+    """
+    A variable collection of bytes, stored as an `Vec<u8>`
+    """
     type_string = 'Vec<u8>'
 
     def process(self):
@@ -268,7 +298,10 @@ class RawBytes(ScaleType):
         return ScaleBytes(bytes.fromhex(value[2:]))
 
 
-class U8(ScaleType):
+class U8(ScalePrimitive):
+    """
+    Unsigned 8-bit int type, encoded in little-endian (LE) format
+    """
 
     def process(self):
         return self.get_next_u8()
@@ -281,7 +314,10 @@ class U8(ScaleType):
             raise ValueError('{} out of range for u8'.format(value))
 
 
-class U16(ScaleType):
+class U16(ScalePrimitive):
+    """
+    Unsigned 16-bit int type, encoded in little-endian (LE) format
+    """
 
     def process(self):
         return int.from_bytes(self.get_next_bytes(2), byteorder='little')
@@ -294,8 +330,10 @@ class U16(ScaleType):
             raise ValueError('{} out of range for u16'.format(value))
 
 
-class U32(ScaleType):
-
+class U32(ScalePrimitive):
+    """
+    Unsigned 32-bit int type, encoded in little-endian (LE) format
+    """
     def process(self):
         return int.from_bytes(self.get_next_bytes(4), byteorder='little')
 
@@ -307,8 +345,10 @@ class U32(ScaleType):
             raise ValueError('{} out of range for u32'.format(value))
 
 
-class U64(ScaleType):
-
+class U64(ScalePrimitive):
+    """
+    Unsigned 64-bit int type, encoded in little-endian (LE) format
+    """
     def process(self):
         return int(int.from_bytes(self.get_next_bytes(8), byteorder='little'))
 
@@ -320,7 +360,10 @@ class U64(ScaleType):
             raise ValueError('{} out of range for u64'.format(value))
 
 
-class U128(ScaleType):
+class U128(ScalePrimitive):
+    """
+    Unsigned 128-bit int type, encoded in little-endian (LE) format
+    """
 
     def process(self):
         return int(int.from_bytes(self.get_next_bytes(16), byteorder='little'))
@@ -333,7 +376,10 @@ class U128(ScaleType):
             raise ValueError('{} out of range for u128'.format(value))
 
 
-class U256(ScaleType):
+class U256(ScalePrimitive):
+    """
+    Unsigned 256-bit int type, encoded in little-endian (LE) format
+    """
 
     def process(self):
         return int(int.from_bytes(self.get_next_bytes(32), byteorder='little'))
@@ -346,8 +392,10 @@ class U256(ScaleType):
             raise ValueError('{} out of range for u256'.format(value))
 
 
-class I8(ScaleType):
-
+class I8(ScalePrimitive):
+    """
+    Signed 8-bit int type, encoded in little-endian (LE) format
+    """
     def process(self):
         return int.from_bytes(self.get_next_bytes(1), byteorder='little', signed=True)
 
@@ -359,8 +407,10 @@ class I8(ScaleType):
             raise ValueError('{} out of range for i8'.format(value))
 
 
-class I16(ScaleType):
-
+class I16(ScalePrimitive):
+    """
+    Signed 16-bit int type, encoded in little-endian (LE) format
+    """
     def process(self):
         return int.from_bytes(self.get_next_bytes(2), byteorder='little', signed=True)
 
@@ -372,8 +422,10 @@ class I16(ScaleType):
             raise ValueError('{} out of range for i16'.format(value))
 
 
-class I32(ScaleType):
-
+class I32(ScalePrimitive):
+    """
+    Signed 32-bit int type, encoded in little-endian (LE) format
+    """
     def process(self):
         return int.from_bytes(self.get_next_bytes(4), byteorder='little', signed=True)
 
@@ -385,8 +437,10 @@ class I32(ScaleType):
             raise ValueError('{} out of range for i32'.format(value))
 
 
-class I64(ScaleType):
-
+class I64(ScalePrimitive):
+    """
+    Signed 64-bit int type, encoded in little-endian (LE) format
+    """
     def process(self):
         return int.from_bytes(self.get_next_bytes(8), byteorder='little', signed=True)
 
@@ -398,8 +452,10 @@ class I64(ScaleType):
             raise ValueError('{} out of range for i64'.format(value))
 
 
-class I128(ScaleType):
-
+class I128(ScalePrimitive):
+    """
+    Signed 128-bit int type, encoded in little-endian (LE) format
+    """
     def process(self):
         return int.from_bytes(self.get_next_bytes(16), byteorder='little', signed=True)
 
@@ -411,8 +467,10 @@ class I128(ScaleType):
             raise ValueError('{} out of range for i128'.format(value))
 
 
-class I256(ScaleType):
-
+class I256(ScalePrimitive):
+    """
+    Signed 256-bit int type, encoded in little-endian (LE) format
+    """
     def process(self):
         return int.from_bytes(self.get_next_bytes(32), byteorder='little', signed=True)
 
@@ -424,7 +482,7 @@ class I256(ScaleType):
             raise ValueError('{} out of range for i256'.format(value))
 
 
-class F32(ScaleType):
+class F32(ScalePrimitive):
 
     def process(self):
         return struct.unpack('f', self.get_next_bytes(4))[0]
@@ -436,7 +494,7 @@ class F32(ScaleType):
         return ScaleBytes(struct.pack('f', value))
 
 
-class F64(ScaleType):
+class F64(ScalePrimitive):
 
     def process(self):
         return struct.unpack('d', self.get_next_bytes(8))[0]
@@ -448,8 +506,10 @@ class F64(ScaleType):
         return ScaleBytes(struct.pack('d', value))
 
 
-class H160(ScaleType):
-
+class H160(ScalePrimitive):
+    """
+    Fixed-size uninterpreted hash type with 20 bytes (160 bits) size.
+    """
     def process(self):
         return '0x{}'.format(self.get_next_bytes(20).hex())
 
@@ -459,8 +519,10 @@ class H160(ScaleType):
         return ScaleBytes(value)
 
 
-class H256(ScaleType):
-
+class H256(ScalePrimitive):
+    """
+    Fixed-size uninterpreted hash type with 32 bytes (256 bits) size.
+    """
     def process(self):
         return '0x{}'.format(self.get_next_bytes(32).hex())
 
@@ -470,8 +532,10 @@ class H256(ScaleType):
         return ScaleBytes(value)
 
 
-class H512(ScaleType):
-
+class H512(ScalePrimitive):
+    """
+    Fixed-size uninterpreted hash type with 64 bytes (512 bits) size.
+    """
     def process(self):
         return '0x{}'.format(self.get_next_bytes(64).hex())
 
@@ -487,7 +551,9 @@ class H512(ScaleType):
 
 
 class Struct(ScaleType):
-
+    """
+    A struct is a composite data type that groups together zero or more values with various types into a single object
+    """
     def __init__(self, data=None, type_mapping=None, **kwargs):
 
         if type_mapping:
@@ -511,10 +577,21 @@ class Struct(ScaleType):
 
         return result
 
-    def process_encode(self, value):
+    def process_encode(self, value: Union[dict, tuple, str, int, bool]) -> ScaleBytes:
         data = ScaleBytes(bytearray())
 
         self.value_object = {}
+
+        if type(value) in (str, int, bool):
+            # Convert to tuple with one element
+            value = (value,)
+
+        if type(value) is tuple:
+            # Convert tuple to dict
+            try:
+                value = {key: value[idx] for idx, (key, _) in enumerate(self.type_mapping)}
+            except IndexError:
+                raise ValueError("Not enough items in tuple to match type_mapping")
 
         for key, data_type in self.type_mapping:
             if key not in value:
@@ -527,6 +604,25 @@ class Struct(ScaleType):
             self.value_object[key] = element_obj
 
         return data
+
+    @classmethod
+    def generate_type_decomposition(cls, _recursion_level: int = 0, max_recursion: int = TYPE_DECOMP_MAX_RECURSIVE):
+
+        if cls.type_mapping is None:
+            raise ValueError("'type_mapping' is not set")
+
+        if _recursion_level > max_recursion:
+            return cls.__name__
+
+        result = {}
+        for key, data_type in cls.type_mapping:
+            if data_type is not None:
+                scale_obj = cls.runtime_config.create_scale_object(data_type)
+                data_type = scale_obj.generate_type_decomposition(
+                    _recursion_level=_recursion_level + 1, max_recursion=max_recursion
+                )
+            result[key] = data_type
+        return result
 
 
 class Tuple(ScaleType):
@@ -578,8 +674,30 @@ class Tuple(ScaleType):
 
         return data
 
+    @classmethod
+    def generate_type_decomposition(cls, _recursion_level: int = 0, max_recursion: int = TYPE_DECOMP_MAX_RECURSIVE):
+        result = ()
+        if cls.type_mapping:
+            for member_type in cls.type_mapping:
+                if member_type is not None:
+                    scale_obj = cls.runtime_config.create_scale_object(member_type)
+                    member_type = scale_obj.generate_type_decomposition(
+                        _recursion_level=_recursion_level + 1, max_recursion=max_recursion
+                    )
+
+                    if len(cls.type_mapping) == 1:
+                        return member_type
+
+                result += (member_type,)
+        return result
+
 
 class Set(ScaleType):
+    """
+    The Set type in Substrate is an unordered collection that contains unique elements.
+    It is implemented using a binary search tree, allowing for efficient insertion, removal, and lookup operations.
+    """
+
     value_list = []
     value_type = 'u64'
 
@@ -613,6 +731,10 @@ class Set(ScaleType):
         u64_obj = self.runtime_config.create_scale_object(type_string=self.value_type)
 
         return u64_obj.encode(result)
+
+    @classmethod
+    def generate_type_decomposition(cls, _recursion_level: int = 0, max_recursion: int = TYPE_DECOMP_MAX_RECURSIVE):
+        return tuple(cls.value_list)
 
 
 class Era(ScaleType):
@@ -718,8 +840,10 @@ class Era(ScaleType):
         return
 
 
-class Bool(ScaleType):
-
+class Bool(ScalePrimitive):
+    """
+    Boolean type
+    """
     def process(self):
         return self.get_next_bool()
 
@@ -764,6 +888,9 @@ class ProposalPreimage(Struct):
 
 
 class GenericAccountId(H256):
+    """
+    An SS58 formatted representation of an account
+    """
 
     def __init__(self, data=None, **kwargs):
         self.ss58_address = None
@@ -795,20 +922,33 @@ class GenericAccountId(H256):
     def process_scale_info_definition(cls, scale_info_definition: 'GenericRegistryType', prefix: str):
         return
 
+    @classmethod
+    def generate_type_decomposition(cls, _recursion_level: int = 0, max_recursion: int = TYPE_DECOMP_MAX_RECURSIVE):
+        return 'AccountId'
+
 
 class GenericEthereumAccountId(H160):
-
+    """
+    Representation of an Ethereum address, internally a `H160`
+    """
     @classmethod
     def process_scale_info_definition(cls, scale_info_definition: 'GenericRegistryType', prefix: str):
         return
 
 
 class GenericAccountIndex(U32):
+    """
+    The AccountIndex type Substrate represents an account index, which is a unique identifier assigned
+    to an account in the Substrate runtime.
+    """
     pass
 
 
 class Vec(ScaleType):
-
+    """
+    A Vec in RUST is a dynamically resizable array that can hold a sequence of elements of the same type, allowing for
+    efficient random access and insertion or removal of elements at the end of the vector.
+    """
     def __init__(self, data=None, **kwargs):
         self.elements = []
         super().__init__(data, **kwargs)
@@ -885,8 +1025,32 @@ class Vec(ScaleType):
     def __len__(self):
         return len(self.value_object)
 
+    @classmethod
+    def generate_type_decomposition(cls, _recursion_level: int = 0, max_recursion: int = TYPE_DECOMP_MAX_RECURSIVE):
+
+        if cls.sub_type is None:
+            raise ValueError("'sub_type' is not set")
+
+        sub_obj = cls.runtime_config.create_scale_object(cls.sub_type)
+        sub_type_decomp = sub_obj.generate_type_decomposition(
+            _recursion_level=_recursion_level + 1, max_recursion=max_recursion
+        )
+
+        if sub_type_decomp == 'u8':
+            # Translate Vec<u8> to Bytes
+            return 'Bytes'
+        else:
+            return [
+                sub_obj.generate_type_decomposition(_recursion_level=_recursion_level + 1, max_recursion=max_recursion)
+            ]
+
 
 class BoundedVec(Vec):
+    """
+    BoundedVec is a fixed-size vector used in Substrate, with a maximum number of elements that can be added.
+    It is used in cases where a fixed-size buffer is required, such as in the case of the transaction input/output
+    limit in the Substrate runtime.
+    """
     def __init__(self, data=None, **kwargs):
 
         if self.sub_type and ',' in self.sub_type:
@@ -937,6 +1101,10 @@ class BitVec(ScaleType):
         byte_length = math.ceil(value.bit_length() / 8)
 
         return data + value.to_bytes(length=byte_length, byteorder='little')
+
+    @classmethod
+    def generate_type_decomposition(cls, _recursion_level: int = 0, max_recursion: int = TYPE_DECOMP_MAX_RECURSIVE):
+        return 'BitVec'
 
 
 class GenericAddress(ScaleType):
@@ -1000,6 +1168,10 @@ class GenericAddress(ScaleType):
         else:
             return self.value
 
+    @classmethod
+    def generate_type_decomposition(cls, _recursion_level: int = 0, max_recursion: int = TYPE_DECOMP_MAX_RECURSIVE):
+        return cls.__name__.lower()
+
 
 class AccountIdAddress(GenericAddress):
 
@@ -1034,7 +1206,9 @@ class RawAddress(GenericAddress):
 
 
 class Enum(ScaleType):
-
+    """
+    A fixed number of variants, each mutually exclusive and potentially implying a further value or series of values.
+    """
     value_list = []
     type_mapping = None
 
@@ -1127,6 +1301,32 @@ class Enum(ScaleType):
                 return list(self.value.values())[0]
             else:
                 return self.value_list[self.index]
+
+    @classmethod
+    def generate_type_decomposition(cls, _recursion_level: int = 0, max_recursion: int = TYPE_DECOMP_MAX_RECURSIVE):
+
+        if _recursion_level > max_recursion:
+            return cls.__name__
+
+        if cls.type_mapping:
+
+            # Check if type_mapping can be converted to simple value_list
+            if all([t == 'Null' for n, t in cls.type_mapping]):
+                return tuple([n for n, t in cls.type_mapping if n is not None])
+
+            result = {}
+            for key, data_type in cls.type_mapping:
+                if data_type == 'Null':
+                    data_type = None
+                if data_type is not None:
+                    scale_obj = cls.runtime_config.create_scale_object(data_type)
+                    data_type = scale_obj.generate_type_decomposition(
+                        _recursion_level=_recursion_level + 1, max_recursion=max_recursion
+                    )
+                result[key] = data_type
+            return result
+        else:
+            return tuple(cls.value_list)
 
 
 class Data(Enum):
@@ -1248,6 +1448,12 @@ class StorageHasher(Enum):
 
 
 class Conviction(Enum):
+    """
+    Conviction represents a measure of the degree of confidence or trust that a stakeholder has in a particular proposal
+    in the Substrate runtime. It is used to determine the voting power of a stakeholder for a particular proposal,
+    with higher conviction leading to more voting power.
+    """
+
     CONVICTION_MASK = 0b01111111
     DEFAULT_CONVICTION = 0b00000000
 
@@ -1300,6 +1506,13 @@ class GenericVote(U8):
 
         return super().process_encode(value)
 
+    @classmethod
+    def generate_type_decomposition(cls, _recursion_level: int = 0, max_recursion: int = TYPE_DECOMP_MAX_RECURSIVE):
+        return {
+            'aye': 'bool',
+            'conviction': cls.runtime_config.create_scale_object('Conviction').generate_type_decomposition()
+        }
+
 
 class GenericCall(ScaleType):
 
@@ -1335,18 +1548,24 @@ class GenericCall(ScaleType):
             if len(self.call_args) > 0:
 
                 # Check args format
-                if type(call_obj[1].value) is not tuple:
-                    call_args_values = (call_obj[1],)
-                else:
-                    call_args_values = call_obj[1]
+                if type(call_obj[1].value) is dict:
 
-                for idx, call_arg in enumerate(self.call_args):
-                    call_args.append({
-                        'name': call_arg.value['name'],
-                        'type': self.convert_type(call_arg.value['typeName']),
-                        'value': call_args_values[idx].value
-                    })
-                    self.call_args[idx].value_object['value'] = call_args_values[idx]
+                    for idx, call_arg in enumerate(self.call_args):
+                        call_args.append({
+                            'name': call_arg.value['name'],
+                            'type': self.convert_type(call_arg.value['typeName']),
+                            'value': call_obj[1].value[call_arg.value['name']]
+                        })
+                        self.call_args[idx].value_object['value'] = call_obj[1][call_arg.value['name']]
+                else:
+                    # Backwards compatibility
+                    for idx, call_arg in enumerate(self.call_args):
+                        call_args.append({
+                            'name': call_arg.value['name'],
+                            'type': self.convert_type(call_arg.value['typeName']),
+                            'value': call_obj[1][idx].value
+                        })
+                        self.call_args[idx].value_object['value'] = call_obj[1][idx]
 
             self.value_object = {
                 'call_index': f'0x{self.call_index}',
@@ -1427,12 +1646,13 @@ class GenericCall(ScaleType):
 
             data = ScaleBytes(self.call_module['index'].get_used_bytes())
 
-            call_type_string = self.call_module['calls'].value_object.get_type_string()
+            if self.call_module['calls'].value_object:
+                # Retrieve call function
+                call_type_string = self.call_module['calls'].value_object.get_type_string()
+                call_obj = self.runtime_config.create_scale_object(call_type_string)
 
-            call_obj = self.runtime_config.create_scale_object(call_type_string)
-
-            # Retrieve used variant of call type
-            self.call_function = call_obj.scale_info_type['def'][1].get_variant_by_name(value['call_function'])
+                # Retrieve used variant of call type
+                self.call_function = call_obj.scale_info_type['def'][1].get_variant_by_name(value['call_function'])
 
             if not self.call_function:
                 raise ValueError(f"Call function '{value['call_module']}.{value['call_function']}' not found")
@@ -1450,6 +1670,10 @@ class GenericCall(ScaleType):
             # Encode call params
             if len(self.call_args) > 0:
                 self.value_object['call_args'] = {}
+
+                # convert alternative list format of call_args
+                if type(value['call_args']) is list:
+                    value['call_args'] = {ca['name']: ca['value'] for ca in value['call_args']}
 
                 for arg in self.call_args:
                     if arg.value['name'] not in value['call_args']:
@@ -1514,6 +1738,10 @@ class GenericCall(ScaleType):
 
             return data
 
+    @classmethod
+    def generate_type_decomposition(cls, _recursion_level: int = 0, max_recursion: int = TYPE_DECOMP_MAX_RECURSIVE):
+        return 'Call'
+
 
 class GenericContractExecResult(Enum):
     def __init__(self, data=None, contract_result_scale_type=None, **kwargs):
@@ -1526,15 +1754,21 @@ class GenericContractExecResult(Enum):
 
     def process(self):
         value = super().process()
-        self.process_contract_result()
+        self.process_contract_result(value)
         return value
 
-    def process_contract_result(self):
-        if 'success' in self.value:
-            self.gas_consumed = self.value['success']['gas_consumed']
-            self.gas_required = self.value['success']['gas_required']
-            self.flags = self.value['success']['flags']
-            self.contract_result_data = self.value['success']['data']
+    def process_contract_result(self, value):
+        if 'success' in value:
+            self.gas_consumed = value['success']['gas_consumed']
+            self.gas_required = value['success']['gas_required']
+            self.flags = value['success']['flags']
+            self.contract_result_data = value['success']['data']
+
+        elif 'Success' in value:
+            self.gas_consumed = value['Success']['gas_consumed']
+            self.gas_required = None
+            self.flags = value['Success']['flags']
+            self.contract_result_data = value['Success']['data']
 
     def process_encode(self, value):
 
@@ -1546,8 +1780,35 @@ class GenericContractExecResult(Enum):
         return super().process_encode(value)
 
 
-class OpaqueCall(Bytes):
+class GenericContractExecResultV2(Struct):
 
+    @property
+    def gas_consumed(self):
+        return self.value['gas_consumed']
+
+    @property
+    def gas_required(self):
+        return self.value['gas_required']
+
+    @property
+    def flags(self):
+        try:
+            return self.value['result']['Ok']['flags']
+        except KeyError:
+            return None
+
+    @property
+    def contract_result_data(self):
+        try:
+            return self.value_object['result'][1]['data']
+        except KeyError:
+            return None
+
+
+class OpaqueCall(Bytes):
+    """
+    A Bytes representation of a `Call`, without having to decode the contents
+    """
     def process_encode(self, value):
         call_obj = self.runtime_config.create_scale_object(
             type_string='Call', metadata=self.metadata
@@ -1605,6 +1866,20 @@ class WrapperKeepOpaque(Struct):
             self.value_object = bytes_obj.value_object
             return f'0x{bytes_obj.value_object.hex()}'
 
+    @classmethod
+    def generate_type_decomposition(cls, _recursion_level: int = 0, max_recursion: int = TYPE_DECOMP_MAX_RECURSIVE):
+
+        if cls.type_mapping is None:
+            raise ValueError("'type_mapping' is not set")
+
+        # Return decomposition of wrapped type
+        wrapped_obj = cls.runtime_config.create_scale_object(
+            type_string=cls.type_mapping[1]
+        )
+        return wrapped_obj.generate_type_decomposition(
+            _recursion_level=_recursion_level + 1, max_recursion=max_recursion
+        )
+
 
 class MultiAccountId(GenericAccountId):
 
@@ -1640,7 +1915,9 @@ class MultiAccountId(GenericAccountId):
 
 
 class FixedLengthArray(ScaleType):
-
+    """
+    Fixed sized array of specified subtype e.g. [u8; 8]
+    """
     element_count = 0
 
     def process(self):
@@ -1668,6 +1945,9 @@ class FixedLengthArray(ScaleType):
             if type(value) is str and value[0:2] == '0x':
                 value = bytes.fromhex(value[2:])
 
+            if type(value) is list:
+                value = bytes(value)
+
             if type(value) is not bytes:
                 raise ValueError('Value should a hex-string (0x..) or bytes')
 
@@ -1689,8 +1969,24 @@ class FixedLengthArray(ScaleType):
 
             return data
 
+    @classmethod
+    def generate_type_decomposition(cls, _recursion_level: int = 0, max_recursion: int = TYPE_DECOMP_MAX_RECURSIVE):
+        if cls.sub_type is None:
+            raise ValueError("'sub_type' is not set")
+
+        sub_cls = cls.runtime_config.get_decoder_class(cls.sub_type)
+        sub_cls_decomp = sub_cls.generate_type_decomposition(
+            _recursion_level=_recursion_level + 1, max_recursion=max_recursion
+        )
+        return f'[{sub_cls_decomp}; {cls.element_count}]'
+
 
 class GenericMultiAddress(Enum):
+
+    """
+    MultiAddress is a type used in the Substrate runtime to represent an address that can be expressed in multiple ways, such as an account ID, a public key, or a human-readable name, allowing for flexible addressing and storage of data.
+    """
+
     type_mapping = [
         ["Id", "AccountId"],
         ["Index", "Compact<AccountIndex>"],
@@ -1849,6 +2145,11 @@ class BTreeSet(ScaleType):
 
 
 class GenericMetadataAll(Enum):
+    """
+    Enum that contains a Metadata version.
+
+    E.g.  `{"V14": MetadataV14}`
+    """
 
     def __init__(self, data, sub_type=None, **kwargs):
         self.__call_index = {}
@@ -1948,6 +2249,9 @@ class GenericMetadataAll(Enum):
 
 
 class GenericMetadataVersioned(Tuple):
+    """
+    Tuple that contains a backwards compatible MetadataAll type
+    """
 
     @property
     def call_index(self):
@@ -2052,35 +2356,6 @@ class GenericRegistryType(Struct):
 
         return super().process_encode(value)
 
-    def retrieve_type_decomposition(self):
-        if 'variant' in self.value['def']:
-            for variant in self.value['def']['variant']['variants']:
-                for field in variant['fields']:
-                    field_obj = self.runtime_config.create_scale_object(f"scale_info::{field['type']}")
-                    variant['value'] = field_obj.scale_info_type.retrieve_type_decomposition()
-
-        elif 'composite' in self.value['def']:
-            for field in self.value['def']['composite']['fields']:
-                field_obj = self.runtime_config.create_scale_object(f"scale_info::{field['type']}")
-                field['value'] = field_obj.scale_info_type.retrieve_type_decomposition()
-
-        elif 'array' in self.value['def']:
-            type_def = self.value['def']['array']
-            array_element_obj = self.runtime_config.create_scale_object(f"scale_info::{type_def['type']}")
-            type_def['value'] = array_element_obj.scale_info_type.retrieve_type_decomposition()
-
-        elif 'sequence' in self.value['def']:
-            type_def = self.value['def']['sequence']
-            array_element_obj = self.runtime_config.create_scale_object(f"scale_info::{type_def['type']}")
-            type_def['value'] = array_element_obj.scale_info_type.retrieve_type_decomposition()
-
-        elif 'tuple' in self.value['def']:
-            for idx, type_def in self.value['def']['tuple']:
-                element_obj = self.runtime_config.create_scale_object(f"scale_info::{type_def}")
-                self.value['def']['tuple'][idx] = element_obj.scale_info_type.retrieve_type_decomposition()
-
-        return self.value['def']
-
 
 class GenericField(Struct):
 
@@ -2118,7 +2393,7 @@ class GenericVariant(Struct):
     def args(self):
         return self.value_object['fields']
 
-    def get_param_info(self) -> dict:
+    def get_param_info(self, max_recursion: int = TYPE_DECOMP_MAX_RECURSIVE) -> dict:
         """
         Generates a dictionary of all possible params with their decomposition information
 
@@ -2131,7 +2406,7 @@ class GenericVariant(Struct):
         for arg in self.args:
             param_type_obj = self.runtime_config.create_scale_object(arg.type)
 
-            param_info[arg.name] = param_type_obj.scale_info_type.retrieve_type_decomposition()
+            param_info[arg.name] = param_type_obj.generate_type_decomposition(max_recursion=max_recursion)
 
         return param_info
 
@@ -2279,18 +2554,28 @@ class GenericPalletMetadata(Struct):
         return self.value['name']
 
     @property
-    def storage(self):
+    def storage(self) -> Optional[list]:
+
         storage_functions = self.value_object['storage'].value_object
 
         if storage_functions:
-            return storage_functions.value_object['entries'].value_object
+            pallet_version_sf = self.runtime_config.create_scale_object("StorageEntryMetadataV13")
+            pallet_version_sf.encode({
+                'name': ':__STORAGE_VERSION__:',
+                'modifier': 'Default',
+                'type': {'Plain': "u16"},
+                'default': '0x0000',
+                'documentation': ['Returns the current pallet version from storage']
+            })
+
+            return [pallet_version_sf] + storage_functions['entries'].elements
 
     @property
     def calls(self):
         return self.value_object['calls'].value_object
 
     @property
-    def events(self):
+    def events(self) -> Optional[list]:
         events = self.value_object['events'].value_object
 
         if events:
@@ -2305,10 +2590,13 @@ class GenericPalletMetadata(Struct):
         return self.value_object['errors'].value_object
 
     def get_storage_function(self, name: str):
-        storage_functions = self.value_object['storage'].value_object
+        if self.storage:
 
-        if storage_functions.value_object:
-            for storage_function in storage_functions['entries']:
+            # Convert name for well-known PalletVersion storage entry
+            if name == 'PalletVersion':
+                name = ':__STORAGE_VERSION__:'
+
+            for storage_function in self.storage:
                 if storage_function.value['name'] == name:
                     return storage_function
 
@@ -2400,7 +2688,7 @@ class GenericStorageEntryMetadata(Struct):
         else:
             raise NotImplementedError()
 
-    def get_param_info(self) -> list:
+    def get_param_info(self, max_recursion: int = TYPE_DECOMP_MAX_RECURSIVE) -> list:
         raise NotImplementedError()
 
 
@@ -2452,11 +2740,36 @@ class ScaleInfoStorageEntryMetadata(GenericStorageEntryMetadata):
         else:
             raise NotImplementedError()
 
-    def get_param_info(self) -> list:
+    def get_param_info(self, max_recursion: int = TYPE_DECOMP_MAX_RECURSIVE) -> list:
+        """
+        Return a type decomposition how to format parameters for current storage function
+
+        Returns
+        -------
+        list
+        """
         param_info = []
         for param_type_string in self.get_params_type_string():
             scale_type = self.runtime_config.create_scale_object(param_type_string)
-            param_info.append(scale_type.scale_info_type.retrieve_type_decomposition())
+            param_info.append(scale_type.generate_type_decomposition(max_recursion=max_recursion))
+
+        return param_info
+
+
+class GenericRuntimeCallDefinition(Struct):
+
+    def get_param_info(self, max_recursion: int = TYPE_DECOMP_MAX_RECURSIVE) -> list:
+        """
+        Return a type decomposition how to format parameters for current storage function
+
+        Returns
+        -------
+        list
+        """
+        param_info = []
+        for param in self.value['params']:
+            scale_type = self.runtime_config.create_scale_object(param['type'])
+            param_info.append(scale_type.generate_type_decomposition(max_recursion=max_recursion))
 
         return param_info
 
@@ -2534,7 +2847,10 @@ class TypeNotSupported(ScaleType):
 
 
 class GenericExtrinsic(ScaleType):
-
+    """
+    The Extrinsic type is used to send transactions from an account to the Substrate runtime, and it can contain
+    one or more calls to the runtime functions.
+    """
     def __init__(self, *arg, **kwargs):
         self.signed = None
         super().__init__(*arg, **kwargs)
@@ -2569,10 +2885,10 @@ class GenericExtrinsic(ScaleType):
             extrinsic_version = extrinsic_versions[extrinsic_version_idx]
 
             self.value_object.update(self.process_type(extrinsic_version, metadata=self.metadata).value_object)
-            value['extrinsic_hash'] = f'0x{self.extrinsic_hash.hex()}'
         else:
             self.value_object.update(self.process_type('Inherent', metadata=self.metadata).value_object)
-            value['extrinsic_hash'] = None
+
+        value['extrinsic_hash'] = f'0x{self.extrinsic_hash.hex()}'
 
         value.update({key: value.serialize() for (key, value) in self.value_object.items()})
 
@@ -2623,6 +2939,10 @@ class GenericExtrinsic(ScaleType):
 
         return data
 
+    @classmethod
+    def generate_type_decomposition(cls, _recursion_level: int = 0, max_recursion: int = TYPE_DECOMP_MAX_RECURSIVE):
+        return 'Extrinsic'
+
 
 class Extrinsic(GenericExtrinsic):
     pass
@@ -2656,13 +2976,22 @@ class GenericExtrinsicV4(Struct):
                 if 'ChargeAssetTxPayment' in signed_extensions:
                     self.type_mapping.append(['asset_id', signed_extensions['ChargeAssetTxPayment']['extrinsic']])
 
+                if 'CheckMetadataHash' in signed_extensions:
+                    self.type_mapping.append(['mode', signed_extensions['CheckMetadataHash']['extrinsic']])
+
                 self.type_mapping.append(['call', 'Call'])
 
         super().__init__(*args, **kwargs)
 
 
 class GenericEvent(Enum):
+    """
+    An Event is a type used to represent a runtime event, which is a signal that indicates that a
+    specific state transition has occurred.
 
+    It is implemented as a variant enum that contains different types of events, such as system events, runtime events,
+    and custom events, each with its own set of fields that describe the event.
+    """
     def __init__(self, *args, **kwargs):
 
         self.event_idx = None

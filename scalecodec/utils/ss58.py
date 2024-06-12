@@ -106,7 +106,7 @@ def ss58_encode(address: Union[str, bytes], ss58_format: int = 42) -> str:
 
     Returns
     -------
-
+    str
     """
     checksum_prefix = b'SS58PRE'
 
@@ -152,7 +152,7 @@ def ss58_encode_account_index(account_index: int, ss58_format: int = 42) -> str:
 
     Returns
     -------
-
+    str
     """
 
     if 0 <= account_index <= 2 ** 8 - 1:
@@ -230,3 +230,29 @@ def is_valid_ss58_address(value: str, valid_ss58_format: Optional[int] = None) -
         return False
 
     return True
+
+
+def get_ss58_format(ss58_address: str) -> int:
+    """
+    Returns the SS58 format for given SS58 address
+
+    Parameters
+    ----------
+    ss58_address
+
+    Returns
+    -------
+    int
+    """
+    address_decoded = base58.b58decode(ss58_address)
+
+    if address_decoded[0] & 0b0100_0000:
+        ss58_format = ((address_decoded[0] & 0b0011_1111) << 2) | (address_decoded[1] >> 6) | \
+                      ((address_decoded[1] & 0b0011_1111) << 8)
+    else:
+        ss58_format = address_decoded[0]
+
+    if ss58_format in [46, 47]:
+        raise ValueError(f"{ss58_format} is a reserved SS58 format")
+
+    return ss58_format

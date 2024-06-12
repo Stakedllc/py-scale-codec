@@ -43,7 +43,7 @@ elif environ.get('GITHUB_REF'):
     version = environ['GITHUB_REF'].replace('refs/tags/v', '')
 else:
     # raise ValueError('Missing commit tag, can\'t set version')
-    version = '1.0.48'
+    version = '1.2.10'
 
 here = path.abspath(path.dirname(__file__))
 
@@ -125,7 +125,7 @@ setup(
         #   3 - Alpha
         #   4 - Beta
         #   5 - Production/Stable
-        'Development Status :: 4 - Beta',
+        'Development Status :: 5 - Production/Stable',
 
         # Indicate who your project is intended for
         'Intended Audience :: Developers',
